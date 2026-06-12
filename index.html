@@ -519,14 +519,53 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
-// ── SUPABASE ───────────────────────────────────────────
+// ── SUPABASE (REST) ────────────────────────────────────
 const SUPABASE_URL='https://fsstmpqgnrbbvjqjkrbt.supabase.co';
 const SUPABASE_KEY='sb_publishable_9HYiBcS3OER-J6jEgBDmcg_ODYFb9nh';
-const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const SB_H={apikey:SUPABASE_KEY,Authorization:'Bearer '+SUPABASE_KEY};
 let suppressSync=false;
 const matchSaveTimers={};
+let pollTimer=null;
+
+function sbHeaders(extra){return Object.assign({'Content-Type':'application/json'},SB_H,extra||{});}
+
+async function sbFetch(path,opts){
+  const r=await fetch(SUPABASE_URL+'/rest/v1/'+path,opts);
+  if(!r.ok){
+    const msg=await r.text();
+    throw new Error(r.status+' '+msg);
+  }
+  if(r.status===204)return null;
+  const ct=r.headers.get('content-type')||'';
+  return ct.includes('json')?r.json():null;
+}
+
+async function sbSelect(table,query){
+  return sbFetch(table+'?'+query,{headers:SB_H});
+}
+
+async function sbUpsert(table,rows,onConflict){
+  const body=Array.isArray(rows)?rows:rows;
+  const q=onConflict?'?on_conflict='+onConflict:'';
+  return sbFetch(table+q,{
+    method:'POST',
+    headers:sbHeaders({Prefer:'resolution=merge-duplicates,return=minimal'}),
+    body:JSON.stringify(body)
+  });
+}
+
+async function sbInsert(table,rows){
+  return sbFetch(table,{
+    method:'POST',
+    headers:sbHeaders({Prefer:'return=minimal'}),
+    body:JSON.stringify(rows)
+  });
+}
+
+async function sbDeleteAll(table){
+  return sbFetch(table+'?id=gte.0',{method:'DELETE',headers:SB_H});
+}
 
 function setSyncStatus(ok,msg){
   const el=document.getElementById('sync-status');if(!el)return;
@@ -613,82 +652,64 @@ let S={
   }
 };
 
-function readLocalBackup(){
-  try{
-    const raw=localStorage.getItem('mons-cup-26');
-    if(!raw)return null;
-    return JSON.parse(raw);
-  }catch(e){return null;}
+function applyScores(rows){
+  S.matches.forEach(m=>{m.hg=null;m.ag=null;});
+  (rows||[]).forEach(sm=>{const m=S.matches.find(x=>x.id===sm.id);if(m){m.hg=sm.hg;m.ag=sm.ag;}});
 }
 
-async function seedFromData(d){
-  const people=(d.people||DEFAULTS).map((p,i)=>({sort_order:i,name:p.name||'',teams:p.teams||['','',''],tier:p.tier||3}));
-  const {error:pe}=await sb.from('people').insert(people);
-  if(pe)throw pe;
-  const scores=(d.matches||[]).filter(m=>m.hg!==null||m.ag!==null).map(m=>({id:m.id,hg:m.hg,ag:m.ag}));
-  if(scores.length){
-    const {error:se}=await sb.from('match_scores').upsert(scores,{onConflict:'id'});
-    if(se)throw se;
-  }
-  const sp=d.specials||{};
-  const {error:spe}=await sb.from('specials').upsert({
-    id:1,
-    champion:sp.champion||'',
-    runnerup:sp.runnerup||'',
-    darkhorse:sp.darkhorse||{team:'',round:''},
-    fastest:sp.fastest||{team:'',minute:''},
-    mostscored:sp.mostscored||'',
-    mostconceded:sp.mostconceded||''
-  });
-  if(spe)throw spe;
+async function seedDefaults(){
+  const people=DEFAULTS.map((p,i)=>({sort_order:i,name:p.name,teams:p.teams,tier:p.tier}));
+  await sbInsert('people',people);
 }
 
 async function loadFromDb(){
-  const peopleRes=await sb.from('people').select('*').order('sort_order');
-  const scoresRes=await sb.from('match_scores').select('*');
-  const specialsRes=await sb.from('specials').select('*').eq('id',1).maybeSingle();
-  if(peopleRes.error)throw peopleRes.error;
-  if(scoresRes.error)throw scoresRes.error;
-  if(specialsRes.error)throw specialsRes.error;
-  const people=peopleRes.data;
-  const scores=scoresRes.data;
-  const sp=specialsRes.data;
+  try{
+    const scores=await sbSelect('match_scores','select=id,hg,ag');
+    applyScores(scores);
+  }catch(e){console.error('scores load',e);}
 
-  if(!people||!people.length){
-    const backup=readLocalBackup();
-    await seedFromData(backup||{people:DEFAULTS});
+  let people=[];
+  try{people=await sbSelect('people','select=name,teams,tier&order=sort_order.asc');}catch(e){console.error('people load',e);}
+  if(!people.length){
+    await seedDefaults();
     return loadFromDb();
   }
-
   S.people=people.map(p=>({name:p.name,teams:p.teams,tier:p.tier}));
-  S.matches.forEach(m=>{m.hg=null;m.ag=null;});
-  (scores||[]).forEach(sm=>{const m=S.matches.find(x=>x.id===sm.id);if(m){m.hg=sm.hg;m.ag=sm.ag;}});
-  if(sp){
-    S.specials={
-      champion:sp.champion||'',
-      runnerup:sp.runnerup||'',
-      darkhorse:sp.darkhorse||{team:'',round:''},
-      fastest:sp.fastest||{team:'',minute:''},
-      mostscored:sp.mostscored||'',
-      mostconceded:sp.mostconceded||''
-    };
-  }
+
+  try{
+    const spRows=await sbSelect('specials','select=*&id=eq.1');
+    const sp=spRows&&spRows[0];
+    if(sp){
+      S.specials={
+        champion:sp.champion||'',
+        runnerup:sp.runnerup||'',
+        darkhorse:sp.darkhorse||{team:'',round:''},
+        fastest:sp.fastest||{team:'',minute:''},
+        mostscored:sp.mostscored||'',
+        mostconceded:sp.mostconceded||''
+      };
+    }
+  }catch(e){console.error('specials load',e);}
 }
 
 async function persistMatch(id){
   const m=S.matches.find(x=>x.id===id);if(!m)return;
   suppressSync=true;
-  const {error}=await sb.from('match_scores').upsert({id,hg:m.hg,ag:m.ag,updated_at:new Date().toISOString()},{onConflict:'id'});
+  try{
+    await sbUpsert('match_scores',{id,hg:m.hg,ag:m.ag,updated_at:new Date().toISOString()},'id');
+    setSyncStatus(true,'● Live · shared scores');
+  }catch(e){
+    console.error('Save match failed',e);
+    setSyncStatus(false,'● Save failed');
+  }
   setTimeout(()=>{suppressSync=false;},800);
-  if(error){console.error('Save match failed',error);setSyncStatus(false,'● Save failed: '+error.message);}
-  else setSyncStatus(true,'● Live · shared scores');
 }
 
 function persistMatchKeepalive(id){
   const m=S.matches.find(x=>x.id===id);if(!m)return;
   fetch(SUPABASE_URL+'/rest/v1/match_scores',{
     method:'POST',
-    headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+    headers:sbHeaders({Prefer:'resolution=merge-duplicates,return=minimal'}),
     body:JSON.stringify({id,hg:m.hg,ag:m.ag,updated_at:new Date().toISOString()}),
     keepalive:true
   });
@@ -716,29 +737,37 @@ window.addEventListener('pagehide',flushAllMatchSaves);
 
 async function persistPeople(){
   suppressSync=true;
-  await sb.from('people').delete().gte('id',0);
-  const rows=S.people.map((p,i)=>({sort_order:i,name:p.name||'',teams:p.teams||['','',''],tier:p.tier||3}));
-  const {error}=await sb.from('people').insert(rows);
+  try{
+    await sbDeleteAll('people');
+    const rows=S.people.map((p,i)=>({sort_order:i,name:p.name||'',teams:p.teams||['','',''],tier:p.tier||3}));
+    await sbInsert('people',rows);
+    setSyncStatus(true,'● Live · shared scores');
+  }catch(e){
+    console.error('Save people failed',e);
+    setSyncStatus(false,'● Save failed');
+  }
   suppressSync=false;
-  if(error){console.error('Save people failed',error);setSyncStatus(false,'● Save failed');}
-  else setSyncStatus(true);
 }
 
 async function persistSpecials(){
   suppressSync=true;
-  const {error}=await sb.from('specials').upsert({
-    id:1,
-    champion:S.specials.champion,
-    runnerup:S.specials.runnerup,
-    darkhorse:S.specials.darkhorse,
-    fastest:S.specials.fastest,
-    mostscored:S.specials.mostscored,
-    mostconceded:S.specials.mostconceded,
-    updated_at:new Date().toISOString()
-  });
+  try{
+    await sbUpsert('specials',{
+      id:1,
+      champion:S.specials.champion,
+      runnerup:S.specials.runnerup,
+      darkhorse:S.specials.darkhorse,
+      fastest:S.specials.fastest,
+      mostscored:S.specials.mostscored,
+      mostconceded:S.specials.mostconceded,
+      updated_at:new Date().toISOString()
+    },'id');
+    setSyncStatus(true,'● Live · shared scores');
+  }catch(e){
+    console.error('Save specials failed',e);
+    setSyncStatus(false,'● Save failed');
+  }
   suppressSync=false;
-  if(error){console.error('Save specials failed',error);setSyncStatus(false,'● Save failed');}
-  else setSyncStatus(true);
 }
 
 function applyRemoteScore(row){
@@ -753,36 +782,20 @@ function applyRemoteScore(row){
   renderHero();renderLB();renderPrizes();
 }
 
-function subscribeRealtime(){
-  sb.channel('mons-cup-sync')
-    .on('postgres_changes',{event:'*',schema:'public',table:'match_scores'},payload=>{
-      if(suppressSync)return;
-      const row=payload.new;if(!row||!row.id)return;
-      applyRemoteScore(row);
-    })
-    .on('postgres_changes',{event:'*',schema:'public',table:'people'},async()=>{
-      if(suppressSync)return;
-      const {data}=await sb.from('people').select('*').order('sort_order');
-      if(!data)return;
-      S.people=data.map(p=>({name:p.name,teams:p.teams,tier:p.tier}));
-      renderHero();renderLB();renderSetup();renderMatches();renderPrizes();populateSelects();
-    })
-    .on('postgres_changes',{event:'*',schema:'public',table:'specials'},payload=>{
-      if(suppressSync)return;
-      const row=payload.new;if(!row)return;
-      S.specials={
-        champion:row.champion||'',
-        runnerup:row.runnerup||'',
-        darkhorse:row.darkhorse||{team:'',round:''},
-        fastest:row.fastest||{team:'',minute:''},
-        mostscored:row.mostscored||'',
-        mostconceded:row.mostconceded||''
-      };
-      populateSelects();renderPrizes();renderLB();
-    })
-    .subscribe(status=>{
-      setSyncStatus(status==='SUBSCRIBED','● Live · shared scores');
-    });
+function startPolling(){
+  if(pollTimer)clearInterval(pollTimer);
+  pollTimer=setInterval(async()=>{
+    if(suppressSync)return;
+    try{
+      const scores=await sbSelect('match_scores','select=id,hg,ag');
+      let changed=false;
+      (scores||[]).forEach(row=>{
+        const m=S.matches.find(x=>x.id===row.id);
+        if(m&&(m.hg!==row.hg||m.ag!==row.ag)){applyRemoteScore(row);changed=true;}
+      });
+      if(changed&&document.getElementById('tab-mx')?.classList.contains('on'))renderMatches();
+    }catch(e){console.error('poll failed',e);}
+  },5000);
 }
 
 async function load(){
@@ -792,13 +805,13 @@ async function load(){
     setSyncStatus(true,'● Live · shared scores');
   }catch(e){
     console.error('Load failed',e);
-    S.people=DEFAULTS.map(p=>({...p}));
-    setSyncStatus(false,'● Offline');
+    if(!S.people.length)S.people=DEFAULTS.map(p=>({...p}));
+    setSyncStatus(false,'● Offline · '+e.message);
   }
   document.getElementById('tagline-text').textContent='"'+TAGLINES[Math.floor(Date.now()/86400000)%TAGLINES.length]+'"';
   populateSelects();
   render();
-  subscribeRealtime();
+  startPolling();
 }
 
 // ── HELPERS ────────────────────────────────────────────
