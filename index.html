@@ -522,7 +522,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 <script>
 // ── SUPABASE (REST) ────────────────────────────────────
 const SUPABASE_URL='https://fsstmpqgnrbbvjqjkrbt.supabase.co';
-const SUPABASE_KEY='sb_publishable_9HYiBcS3OER-J6jEgBDmcg_ODYFb9nh';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzc3RtcHFnbnJiYnZqcWprcmJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyMzA3NjUsImV4cCI6MjA5NjgwNjc2NX0.3yO4Uxx4V0pXNLvqVJpwX8ce2Fh4GRD2JWWxlR3G2S4';
 const SB_H={apikey:SUPABASE_KEY,Authorization:'Bearer '+SUPABASE_KEY};
 let suppressSync=false;
 const matchSaveTimers={};
@@ -663,13 +663,16 @@ async function seedDefaults(){
 }
 
 async function loadFromDb(){
+  let scoreCount=0;
   try{
     const scores=await sbSelect('match_scores','select=id,hg,ag');
     applyScores(scores);
-  }catch(e){console.error('scores load',e);}
+    scoreCount=(scores||[]).length;
+  }catch(e){console.error('scores load',e);throw e;}
 
-  let people=[];
+  let people=null;
   try{people=await sbSelect('people','select=name,teams,tier&order=sort_order.asc');}catch(e){console.error('people load',e);}
+  if(people===null)throw new Error('Could not load sweepers');
   if(!people.length){
     await seedDefaults();
     return loadFromDb();
@@ -690,6 +693,7 @@ async function loadFromDb(){
       };
     }
   }catch(e){console.error('specials load',e);}
+  return scoreCount;
 }
 
 async function persistMatch(id){
@@ -801,12 +805,13 @@ function startPolling(){
 async function load(){
   setSyncStatus(true,'● Loading…');
   try{
-    await loadFromDb();
-    setSyncStatus(true,'● Live · shared scores');
+    const n=await loadFromDb();
+    const played=S.matches.filter(m=>m.hg!==null&&m.ag!==null).length;
+    setSyncStatus(true,'● Live · '+played+' scored ('+n+' in db)');
   }catch(e){
     console.error('Load failed',e);
     if(!S.people.length)S.people=DEFAULTS.map(p=>({...p}));
-    setSyncStatus(false,'● Offline · '+e.message);
+    setSyncStatus(false,'● Offline');
   }
   document.getElementById('tagline-text').textContent='"'+TAGLINES[Math.floor(Date.now()/86400000)%TAGLINES.length]+'"';
   populateSelects();
