@@ -627,7 +627,7 @@ async function seedFromData(d){
   if(pe)throw pe;
   const scores=(d.matches||[]).filter(m=>m.hg!==null||m.ag!==null).map(m=>({id:m.id,hg:m.hg,ag:m.ag}));
   if(scores.length){
-    const {error:se}=await sb.from('match_scores').upsert(scores);
+    const {error:se}=await sb.from('match_scores').upsert(scores,{onConflict:'id'});
     if(se)throw se;
   }
   const sp=d.specials||{};
@@ -644,14 +644,15 @@ async function seedFromData(d){
 }
 
 async function loadFromDb(){
-  const [{data:people,error:pe},{data:scores,error:se},{data:sp,error:spe}]=await Promise.all([
-    sb.from('people').select('*').order('sort_order'),
-    sb.from('match_scores').select('*'),
-    sb.from('specials').select('*').eq('id',1).maybeSingle()
-  ]);
-  if(pe)throw pe;
-  if(se)throw se;
-  if(spe)throw spe;
+  const peopleRes=await sb.from('people').select('*').order('sort_order');
+  const scoresRes=await sb.from('match_scores').select('*');
+  const specialsRes=await sb.from('specials').select('*').eq('id',1).maybeSingle();
+  if(peopleRes.error)throw peopleRes.error;
+  if(scoresRes.error)throw scoresRes.error;
+  if(specialsRes.error)throw specialsRes.error;
+  const people=peopleRes.data;
+  const scores=scoresRes.data;
+  const sp=specialsRes.data;
 
   if(!people||!people.length){
     const backup=readLocalBackup();
@@ -660,6 +661,7 @@ async function loadFromDb(){
   }
 
   S.people=people.map(p=>({name:p.name,teams:p.teams,tier:p.tier}));
+  S.matches.forEach(m=>{m.hg=null;m.ag=null;});
   (scores||[]).forEach(sm=>{const m=S.matches.find(x=>x.id===sm.id);if(m){m.hg=sm.hg;m.ag=sm.ag;}});
   if(sp){
     S.specials={
@@ -676,16 +678,41 @@ async function loadFromDb(){
 async function persistMatch(id){
   const m=S.matches.find(x=>x.id===id);if(!m)return;
   suppressSync=true;
-  const {error}=await sb.from('match_scores').upsert({id,hg:m.hg,ag:m.ag,updated_at:new Date().toISOString()});
-  suppressSync=false;
-  if(error){console.error('Save match failed',error);setSyncStatus(false,'● Save failed');}
-  else setSyncStatus(true);
+  const {error}=await sb.from('match_scores').upsert({id,hg:m.hg,ag:m.ag,updated_at:new Date().toISOString()},{onConflict:'id'});
+  setTimeout(()=>{suppressSync=false;},800);
+  if(error){console.error('Save match failed',error);setSyncStatus(false,'● Save failed: '+error.message);}
+  else setSyncStatus(true,'● Live · shared scores');
+}
+
+function persistMatchKeepalive(id){
+  const m=S.matches.find(x=>x.id===id);if(!m)return;
+  fetch(SUPABASE_URL+'/rest/v1/match_scores',{
+    method:'POST',
+    headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+    body:JSON.stringify({id,hg:m.hg,ag:m.ag,updated_at:new Date().toISOString()}),
+    keepalive:true
+  });
 }
 
 function scheduleMatchSave(id){
   clearTimeout(matchSaveTimers[id]);
-  matchSaveTimers[id]=setTimeout(()=>persistMatch(id),400);
+  matchSaveTimers[id]=setTimeout(()=>{delete matchSaveTimers[id];persistMatch(id);},300);
 }
+
+function commitS(id){
+  clearTimeout(matchSaveTimers[id]);
+  delete matchSaveTimers[id];
+  persistMatch(id);
+}
+
+function flushAllMatchSaves(){
+  Object.keys(matchSaveTimers).forEach(id=>{
+    clearTimeout(matchSaveTimers[id]);
+    delete matchSaveTimers[id];
+    persistMatchKeepalive(id);
+  });
+}
+window.addEventListener('pagehide',flushAllMatchSaves);
 
 async function persistPeople(){
   suppressSync=true;
@@ -714,16 +741,24 @@ async function persistSpecials(){
   else setSyncStatus(true);
 }
 
+function applyRemoteScore(row){
+  const m=S.matches.find(x=>x.id===row.id);if(!m)return;
+  m.hg=row.hg;m.ag=row.ag;
+  const wrap=document.querySelector('[data-match-id="'+row.id+'"]');
+  if(wrap){
+    const inputs=wrap.querySelectorAll('.si');
+    if(inputs[0]&&document.activeElement!==inputs[0])inputs[0].value=row.hg??'';
+    if(inputs[1]&&document.activeElement!==inputs[1])inputs[1].value=row.ag??'';
+  }
+  renderHero();renderLB();renderPrizes();
+}
+
 function subscribeRealtime(){
   sb.channel('mons-cup-sync')
     .on('postgres_changes',{event:'*',schema:'public',table:'match_scores'},payload=>{
       if(suppressSync)return;
       const row=payload.new;if(!row||!row.id)return;
-      const m=S.matches.find(x=>x.id===row.id);
-      if(!m)return;
-      m.hg=row.hg;m.ag=row.ag;
-      renderHero();renderLB();renderPrizes();
-      if(document.getElementById('tab-mx')?.classList.contains('on'))renderMatches();
+      applyRemoteScore(row);
     })
     .on('postgres_changes',{event:'*',schema:'public',table:'people'},async()=>{
       if(suppressSync)return;
@@ -985,10 +1020,10 @@ function renderMatches(){
     return`<div class="mcard"><div class="mbar gc-${g}">Group ${g}</div>
       <div class="minner">
         <div><div class="mteam h${hw?' win':''}">${esc(m.home)}</div><div class="mown h">${ho.map(o=>bge(S.people.indexOf(o),o.name)).join('')}</div></div>
-        <div class="score-wrap">
-          <input type="number" min="0" max="20" class="si" value="${m.hg!==null?m.hg:''}" placeholder="—" oninput="upS('${m.id}',this.value,null)">
+        <div class="score-wrap" data-match-id="${m.id}">
+          <input type="number" min="0" max="20" class="si" value="${m.hg!==null?m.hg:''}" placeholder="—" oninput="upS('${m.id}',this.value,null)" onchange="commitS('${m.id}')">
           <span class="ssep">–</span>
-          <input type="number" min="0" max="20" class="si" value="${m.ag!==null?m.ag:''}" placeholder="—" oninput="upS('${m.id}',null,this.value)">
+          <input type="number" min="0" max="20" class="si" value="${m.ag!==null?m.ag:''}" placeholder="—" oninput="upS('${m.id}',null,this.value)" onchange="commitS('${m.id}')">
         </div>
         <div><div class="mteam a${aw?' win':''}">${esc(m.away)}</div><div class="mown a">${ao.map(o=>bge(S.people.indexOf(o),o.name)).join('')}</div></div>
       </div>
