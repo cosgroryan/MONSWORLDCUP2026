@@ -33,7 +33,8 @@ for (let d = new Date(Date.UTC(2026, 5, 11)); d <= new Date(Date.UTC(2026, 6, 19
   TOURNAMENT_DAYS.push(d.toISOString().slice(0, 10));
 }
 
-const TODAY = new Date().toISOString().slice(0, 10);
+// Use NZ timezone — the app lives in NZ, UTC would be 12h behind
+const TODAY = new Date().toLocaleDateString('sv', { timeZone: 'Pacific/Auckland' });
 const DAY_NUM = Math.max(1, TOURNAMENT_DAYS.indexOf(TODAY) + 1);
 
 function getPhase(iso) {
