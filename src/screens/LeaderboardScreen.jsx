@@ -129,8 +129,9 @@ export default function LeaderboardScreen() {
                 <div style={{ textAlign: 'center' }} data-tip="Points">Pts</div>
                 <div style={{ textAlign: 'center' }} data-tip="Wins">W</div>
                 <div style={{ textAlign: 'center' }} data-tip="Draws">D</div>
-                <div style={{ textAlign: 'center' }} data-tip="Games remaining">GR</div>
                 <div style={{ textAlign: 'center' }} data-tip="Goal difference">GD</div>
+                <div style={{ textAlign: 'center' }} data-tip="Games played">GP</div>
+                <div style={{ textAlign: 'center' }} data-tip="Games remaining">GR</div>
               </div>
               {r.map((p, i) => {
                 const c = cp(p.idx);
@@ -161,8 +162,9 @@ export default function LeaderboardScreen() {
                     <div className="lb-pts" style={{ color: c.av }}>{p.pts}</div>
                     <div className="lb-num">{p.w}</div>
                     <div className="lb-num">{p.d}</div>
-                    <div className="lb-num" style={{ color: p.gr > 0 ? 'var(--text3)' : 'inherit' }}>{p.gr}</div>
                     <div className="lb-gd" style={{ color: gdColor }}>{p.gd > 0 ? '+' : ''}{p.gd}</div>
+                    <div className="lb-num">{p.gp}</div>
+                    <div className="lb-num" style={{ color: p.gr > 0 ? 'var(--text3)' : 'inherit' }}>{p.gr}</div>
                   </div>
                 );
               })}
