@@ -1,12 +1,13 @@
 import React from 'react';
-import { cp, getFlag } from '../constants/data';
+import { cp } from '../constants/data';
+import FlagImg from './FlagImg';
 
 export default function TeamBadge({ name, idx }) {
   const c = cp(idx);
-  const flag = getFlag(name);
   return (
-    <span className="bge" style={{ background: c.bg, border: `1px solid ${c.bd}`, color: c.tx }}>
-      {flag && <span style={{ marginRight: 3 }}>{flag}</span>}{name}
+    <span className="bge" style={{ background: c.bg, border: `1px solid ${c.bd}`, color: c.tx, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <FlagImg team={name} size={13} />
+      {name}
     </span>
   );
 }

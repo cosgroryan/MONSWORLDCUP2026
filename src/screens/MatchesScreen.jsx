@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { SCHEDULE, getFlag } from '../constants/data';
+import { SCHEDULE } from '../constants/data';
 import TeamBadge from '../components/TeamBadge';
+import FlagImg from '../components/FlagImg';
 
 const GROUPS = ['all', 'A','B','C','D','E','F','G','H','I','J','K','L'];
 
@@ -42,7 +43,7 @@ function MatchCard({ match, people, schedInfo }) {
       </div>
       <div className="minner">
         <div>
-          <div className={`mteam h${homeWin ? ' win' : ''}`}>{getFlag(match.home)} {match.home}</div>
+          <div className={`mteam h${homeWin ? ' win' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><FlagImg team={match.home} size={16} />{match.home}</div>
           <div className="mown h">
             {homeOwners.map(o => <TeamBadge key={o.id} name={o.name} idx={people.indexOf(o)} />)}
           </div>
@@ -57,7 +58,7 @@ function MatchCard({ match, people, schedInfo }) {
           </div>
         </div>
         <div>
-          <div className={`mteam a${awayWin ? ' win' : ''}`}>{getFlag(match.away)} {match.away}</div>
+          <div className={`mteam a${awayWin ? ' win' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>{match.away}<FlagImg team={match.away} size={16} /></div>
           <div className="mown a">
             {awayOwners.map(o => <TeamBadge key={o.id} name={o.name} idx={people.indexOf(o)} />)}
           </div>

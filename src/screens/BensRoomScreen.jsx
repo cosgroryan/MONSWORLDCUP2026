@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { SCHEDULE, getFlag } from '../constants/data';
+import { SCHEDULE } from '../constants/data';
+import FlagImg from '../components/FlagImg';
 import { supabase } from '../lib/supabase';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -111,14 +112,14 @@ function MatchPrediction({ match, pred, onSave, benTeams }) {
   return (
     <div className={`pred-card${hasResult ? ' played' : ''}`}>
       <div className="pred-teams">
-        <span className={`pred-team${benTeams.includes(match.home) ? ' ben' : ''}`}>{getFlag(match.home)} {match.home}</span>
+        <span className={`pred-team${benTeams.includes(match.home) ? ' ben' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 4 }}><FlagImg team={match.home} size={14} />{match.home}</span>
         <div className="pred-centre">
           {hasResult
             ? <span className="pred-actual">{match.hg}–{match.ag}</span>
             : <span className="pred-vs">{schedInfo?.nzst ? `${schedInfo.nzst} NZST` : 'vs'}</span>
           }
         </div>
-        <span className={`pred-team right${benTeams.includes(match.away) ? ' ben' : ''}`}>{getFlag(match.away)} {match.away}</span>
+        <span className={`pred-team right${benTeams.includes(match.away) ? ' ben' : ''}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>{match.away}<FlagImg team={match.away} size={14} /></span>
       </div>
       <div className="pred-row">
         <span className="pred-label">Your call</span>
