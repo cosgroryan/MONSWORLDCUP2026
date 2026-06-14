@@ -1,18 +1,18 @@
 export function calcPts(person, matches) {
-  let pts = 0, w = 0, d = 0, gf = 0, ga = 0;
+  let pts = 0, w = 0, d = 0, gf = 0, ga = 0, gr = 0;
   const ts = (person.teams || []).filter(Boolean);
   matches.forEach((m) => {
-    if (m.hg === null || m.ag === null) return;
     const ho = ts.includes(m.home);
     const ao = ts.includes(m.away);
     if (!ho && !ao) return;
+    if (m.hg === null || m.ag === null) { gr++; return; }
     if (ho) { gf += m.hg; ga += m.ag; }
     if (ao) { gf += m.ag; ga += m.hg; }
     if (m.hg > m.ag) { if (ho) { pts += 3; w++; } }
     else if (m.ag > m.hg) { if (ao) { pts += 3; w++; } }
     else { if (ho) { pts += 1; d++; } if (ao) { pts += 1; d++; } }
   });
-  return { pts, w, d, gf, ga, gd: gf - ga };
+  return { pts, w, d, gf, ga, gd: gf - ga, gr };
 }
 
 export function ranked(people, matches) {

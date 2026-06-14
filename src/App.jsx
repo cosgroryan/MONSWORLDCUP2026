@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import PrizesScreen from './screens/PrizesScreen';
@@ -7,11 +8,11 @@ import ScheduleScreen from './screens/ScheduleScreen';
 import SetupScreen from './screens/SetupScreen';
 
 const TABS = [
-  { id: 'lb', label: '🏆 Leaderboard', screen: LeaderboardScreen },
-  { id: 'pr', label: '💰 Prizes',       screen: PrizesScreen },
-  { id: 'mx', label: '⚽ Matches',      screen: MatchesScreen },
-  { id: 'sc', label: '📅 Schedule',     screen: ScheduleScreen },
-  { id: 'su', label: '👥 Setup',        screen: SetupScreen },
+  { id: 'lb', label: '🏆 Leaderboard', path: '/leaderboard', screen: LeaderboardScreen },
+  { id: 'pr', label: '💰 Prizes',       path: '/prizes',      screen: PrizesScreen },
+  { id: 'mx', label: '⚽ Matches',      path: '/matches',     screen: MatchesScreen },
+  { id: 'sc', label: '📅 Schedule',     path: '/schedule',    screen: ScheduleScreen },
+  { id: 'su', label: '👥 Setup',        path: '/setup',       screen: SetupScreen },
 ];
 
 function SyncBanner() {
@@ -47,31 +48,32 @@ function SyncBanner() {
 }
 
 function Inner() {
-  const [active, setActive] = useState('lb');
-  const current = TABS.find(t => t.id === active);
-  const Screen = current?.screen;
-
   return (
     <>
       <div className="tab-wrap">
         <div className="tabs">
           {TABS.map(t => (
-            <button key={t.id} className={`tab${active === t.id ? ' on' : ''}`} onClick={() => setActive(t.id)}>
+            <NavLink key={t.id} to={t.path} className={({ isActive }) => `tab${isActive ? ' on' : ''}`}>
               {t.label}
-            </button>
+            </NavLink>
           ))}
         </div>
       </div>
       <SyncBanner />
-      {Screen && <Screen />}
+      <Routes>
+        <Route path="/" element={<Navigate to="/leaderboard" replace />} />
+        {TABS.map(t => <Route key={t.id} path={t.path} element={<t.screen />} />)}
+      </Routes>
     </>
   );
 }
 
 export default function App() {
   return (
-    <AppProvider>
-      <Inner />
-    </AppProvider>
+    <BrowserRouter>
+      <AppProvider>
+        <Inner />
+      </AppProvider>
+    </BrowserRouter>
   );
 }
