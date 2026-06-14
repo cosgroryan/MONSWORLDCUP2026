@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "The Mons Cup '26",
+    "slug": "monsworldcup2026",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#064E3B"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.monsroyale.worldcup2026"
+    },
+    "android": {
+      "package": "com.monsroyale.worldcup2026",
+      "adaptiveIcon": {
+        "backgroundColor": "#064E3B"
+      }
+    },
+    "assetBundlePatterns": ["**/*"]
+  }
+}
