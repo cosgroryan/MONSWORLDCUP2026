@@ -1,37 +1,45 @@
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { GRP_ACCENT, GRP_TEXT } from '../constants/data';
+import { SCHEDULE } from '../constants/data';
 import TeamBadge from '../components/TeamBadge';
 
 const GROUPS = ['all', 'A','B','C','D','E','F','G','H','I','J','K','L'];
 
-function MatchCard({ match, people, onScoreChange }) {
-  const [hv, setHv] = useState(match.hg !== null ? String(match.hg) : '');
-  const [av, setAv] = useState(match.ag !== null ? String(match.ag) : '');
+// Lookup: "Home|Away" → { date, nzst, sortKey }
+const MONTH_NUM = { Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12 };
 
+function parseDateKey(dateStr) {
+  if (!dateStr) return 9999;
+  const [, day, mon] = dateStr.split(' '); // "Fri 12 Jun" → ["Fri","12","Jun"]
+  return (MONTH_NUM[mon] || 0) * 100 + parseInt(day, 10);
+}
+
+const SCHED_LOOKUP = {};
+SCHEDULE.forEach(s => {
+  SCHED_LOOKUP[`${s.home}|${s.away}`] = {
+    date: s.date,
+    nzst: s.nzst,
+    sortKey: parseDateKey(s.date),
+  };
+});
+
+function MatchCard({ match, people, schedInfo }) {
   const homeOwners = people.filter(p => (p.teams || []).includes(match.home));
   const awayOwners = people.filter(p => (p.teams || []).includes(match.away));
   const hasResult = match.hg !== null && match.ag !== null;
   const homeWin = hasResult && match.hg > match.ag;
   const awayWin = hasResult && match.ag > match.hg;
 
-  const commit = (newHv, newAv) => {
-    const h = newHv === '' ? null : parseInt(newHv, 10);
-    const a = newAv === '' ? null : parseInt(newAv, 10);
-    if (newHv !== '' && isNaN(h)) return;
-    if (newAv !== '' && isNaN(a)) return;
-    onScoreChange(match.id, h, a);
-  };
-
-  // Keep inputs in sync when realtime pushes an update (but don't override while typing)
-  const syncedHg = match.hg !== null ? String(match.hg) : '';
-  const syncedAg = match.ag !== null ? String(match.ag) : '';
-  if (hv !== syncedHg && hv === (match.hg !== null ? String(match.hg) : '')) setHv(syncedHg);
-  if (av !== syncedAg && av === (match.ag !== null ? String(match.ag) : '')) setAv(syncedAg);
-
   return (
     <div className="mcard">
-      <div className={`mbar gc-${match.group}`}>Group {match.group}</div>
+      <div className={`mbar gc-${match.group}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Group {match.group}</span>
+        {schedInfo && (
+          <span style={{ fontWeight: 600, opacity: 0.85, fontSize: 10 }}>
+            {schedInfo.date} · {schedInfo.nzst} NZST
+          </span>
+        )}
+      </div>
       <div className="minner">
         <div>
           <div className={`mteam h${homeWin ? ' win' : ''}`}>{match.home}</div>
@@ -40,11 +48,13 @@ function MatchCard({ match, people, onScoreChange }) {
           </div>
         </div>
         <div className="score-wrap">
-          <input type="number" min="0" max="20" className="si"
-            value={hv} onChange={e => setHv(e.target.value)} onBlur={() => commit(hv, av)} placeholder="—" />
+          <div className="si" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none' }}>
+            {hasResult ? match.hg : '—'}
+          </div>
           <span className="ssep">–</span>
-          <input type="number" min="0" max="20" className="si"
-            value={av} onChange={e => setAv(e.target.value)} onBlur={() => commit(hv, av)} placeholder="—" />
+          <div className="si" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none' }}>
+            {hasResult ? match.ag : '—'}
+          </div>
         </div>
         <div>
           <div className={`mteam a${awayWin ? ' win' : ''}`}>{match.away}</div>
@@ -58,12 +68,25 @@ function MatchCard({ match, people, onScoreChange }) {
 }
 
 export default function MatchesScreen() {
-  const { people, matches, updateMatchScore, syncStatus, manualSync } = useApp();
+  const { people, matches, syncStatus, manualSync } = useApp();
   const [groupFilter, setGroupFilter] = useState('all');
 
-  const filtered = groupFilter === 'all' ? matches : matches.filter(m => m.group === groupFilter);
-  const byGroup = {};
-  filtered.forEach(m => { if (!byGroup[m.group]) byGroup[m.group] = []; byGroup[m.group].push(m); });
+  const sorted = useMemo(() => {
+    const base = groupFilter === 'all' ? matches : matches.filter(m => m.group === groupFilter);
+    return [...base].sort((a, b) => {
+      const aPlayed = a.hg !== null && a.ag !== null;
+      const bPlayed = b.hg !== null && b.ag !== null;
+      const aKey = SCHED_LOOKUP[`${a.home}|${a.away}`]?.sortKey ?? 9999;
+      const bKey = SCHED_LOOKUP[`${b.home}|${b.away}`]?.sortKey ?? 9999;
+
+      // Completed first, then upcoming
+      if (aPlayed !== bPlayed) return aPlayed ? -1 : 1;
+      // Within completed: most recent first (desc)
+      if (aPlayed) return bKey - aKey;
+      // Within upcoming: soonest first (asc)
+      return aKey - bKey;
+    });
+  }, [matches, groupFilter]);
 
   return (
     <div className="page">
@@ -77,9 +100,14 @@ export default function MatchesScreen() {
           {syncStatus.syncing ? '⟳ Syncing…' : '⟳ Sync scores'}
         </button>
       </div>
-      {Object.entries(byGroup).map(([g, ms]) =>
-        ms.map(m => <MatchCard key={m.id} match={m} people={people} onScoreChange={updateMatchScore} />)
-      )}
+      {sorted.map(m => (
+        <MatchCard
+          key={m.id}
+          match={m}
+          people={people}
+          schedInfo={SCHED_LOOKUP[`${m.home}|${m.away}`]}
+        />
+      ))}
     </div>
   );
 }

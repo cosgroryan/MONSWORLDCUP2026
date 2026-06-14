@@ -111,12 +111,11 @@ export default function LeaderboardScreen() {
                       <div className="podium-teams">
                         {(p.teams || []).filter(Boolean).map(t => <TeamBadge key={t} name={t} idx={p.idx} />)}
                       </div>
-                      {bonuses.length > 0 && (
-                        <div className="bonus-row" style={{ justifyContent: 'center', marginTop: 6 }}>
-                          {bonuses.map(b => <span key={b} className="chip">{b}</span>)}
-                        </div>
-                      )}
+                      <div className="bonus-row" style={{ justifyContent: 'center', marginTop: 6, minHeight: 26 }}>
+                        {bonuses.map(b => <span key={b} className="chip">{b}</span>)}
+                      </div>
                     </div>
+                    <div className="podium-block">{podiumRanks[ci] + 1}</div>
                   </div>
                 );
               })}
