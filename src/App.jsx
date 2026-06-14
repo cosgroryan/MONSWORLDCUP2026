@@ -6,6 +6,7 @@ import PrizesScreen from './screens/PrizesScreen';
 import MatchesScreen from './screens/MatchesScreen';
 import ScheduleScreen from './screens/ScheduleScreen';
 import SetupScreen from './screens/SetupScreen';
+import BensRoomScreen from './screens/BensRoomScreen';
 
 const TABS = [
   { id: 'lb', label: '🏆 Leaderboard', path: '/leaderboard', screen: LeaderboardScreen },
@@ -13,6 +14,7 @@ const TABS = [
   { id: 'mx', label: '⚽ Matches',      path: '/matches',     screen: MatchesScreen },
   { id: 'sc', label: '📅 Schedule',     path: '/schedule',    screen: ScheduleScreen },
   { id: 'su', label: '👥 Setup',        path: '/setup',       screen: SetupScreen },
+  { id: 'br', label: "⛰️ Ben's Room",  path: '/bens_room',   screen: BensRoomScreen },
 ];
 
 function SyncBanner() {
