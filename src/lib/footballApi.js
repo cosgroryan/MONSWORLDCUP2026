@@ -1,8 +1,9 @@
 import { supabase } from './supabase';
 
-const API_KEY = import.meta.env.VITE_FOOTBALL_API_KEY;
-const COMPETITION_ID = 2178;
-const BASE_URL = 'https://api.football-data.org/v4';
+// In dev: Vite proxies /football-api → api.football-data.org (injects API key server-side, no CORS)
+// In prod: deploy behind a server/CDN that has the same /football-api proxy configured
+const BASE_URL = '/football-api';
+const COMPETITION_ID = 2000; // FIFA World Cup (WC)
 
 const TEAM_NAME_MAP = {
   'Turkey': 'Türkiye',
@@ -20,16 +21,12 @@ const TEAM_NAME_MAP = {
   'USA': 'United States',
 };
 
-function normalise(apiName) {
-  return TEAM_NAME_MAP[apiName] || apiName;
+function normalise(name) {
+  return TEAM_NAME_MAP[name] || name;
 }
 
 export async function syncMatchScores() {
-  if (!API_KEY) throw new Error('VITE_FOOTBALL_API_KEY is not set in .env');
-
-  const response = await fetch(`${BASE_URL}/competitions/${COMPETITION_ID}/matches?stage=GROUP_STAGE`, {
-    headers: { 'X-Auth-Token': API_KEY },
-  });
+  const response = await fetch(`${BASE_URL}/competitions/${COMPETITION_ID}/matches?status=FINISHED`);
 
   if (!response.ok) {
     const text = await response.text();
@@ -38,7 +35,7 @@ export async function syncMatchScores() {
 
   const json = await response.json();
   const finished = (json.matches || []).filter(
-    (m) => m.status === 'FINISHED' && m.score?.fullTime?.home !== null && m.score?.fullTime?.away !== null
+    (m) => m.score?.fullTime?.home !== null && m.score?.fullTime?.away !== null
   );
 
   if (finished.length === 0) return { updated: 0, checked: 0 };
@@ -48,8 +45,8 @@ export async function syncMatchScores() {
 
   const updates = [];
   for (const apiM of finished) {
-    const apiHome = normalise(apiM.homeTeam?.name || apiM.homeTeam?.shortName || '');
-    const apiAway = normalise(apiM.awayTeam?.name || apiM.awayTeam?.shortName || '');
+    const apiHome = normalise(apiM.homeTeam?.name || '');
+    const apiAway = normalise(apiM.awayTeam?.name || '');
     const hg = apiM.score.fullTime.home;
     const ag = apiM.score.fullTime.away;
     const match = ourMatches.find((m) => m.home === apiHome && m.away === apiAway);

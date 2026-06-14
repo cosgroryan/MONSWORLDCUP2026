@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { syncMatchScores } from '../lib/footballApi';
 import { DEFAULTS, buildInitialMatches } from '../constants/data';
 
 const AppContext = createContext(null);
@@ -12,21 +13,27 @@ const DEFAULT_SPECIALS = {
 };
 
 export function AppProvider({ children }) {
-  const [people, setPeople] = useState([]);
+  const [people, setPeople]   = useState([]);
   const [matches, setMatches] = useState([]);
   const [specials, setSpecials] = useState(DEFAULT_SPECIALS);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError]     = useState(null);
+  const [syncStatus, setSyncStatus] = useState({ syncing: false, newScores: null, error: null });
+  const didAutoSync = useRef(false);
 
+  // ── Load from Supabase, seed if empty ─────────────────────────────
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: pData, error: pErr }, { data: mData, error: mErr }, { data: sData, error: sErr }] =
-        await Promise.all([
-          supabase.from('people').select('*').order('sort_order'),
-          supabase.from('matches').select('*'),
-          supabase.from('specials').select('*').eq('id', 1).single(),
-        ]);
+      const [
+        { data: pData, error: pErr },
+        { data: mData, error: mErr },
+        { data: sData, error: sErr },
+      ] = await Promise.all([
+        supabase.from('people').select('*').order('sort_order'),
+        supabase.from('matches').select('*'),
+        supabase.from('specials').select('*').eq('id', 1).single(),
+      ]);
 
       if (pErr) throw pErr;
       if (mErr) throw mErr;
@@ -60,9 +67,35 @@ export function AppProvider({ children }) {
     }
   }, []);
 
-  useEffect(() => {
-    loadAll();
+  // ── Auto-sync scores once on first load ───────────────────────────
+  const runSync = useCallback(async () => {
+    setSyncStatus({ syncing: true, newScores: null, error: null });
+    try {
+      const result = await syncMatchScores();
+      // Re-fetch matches so local state reflects what was written to DB
+      if (result.updated > 0) {
+        const { data } = await supabase.from('matches').select('*');
+        if (data) setMatches(data);
+      }
+      setSyncStatus({ syncing: false, newScores: result.updated, error: null });
+      // Clear the count after 5 s so it doesn't linger
+      setTimeout(() => setSyncStatus(s => ({ ...s, newScores: null })), 5000);
+    } catch (e) {
+      setSyncStatus({ syncing: false, newScores: null, error: e.message });
+      setTimeout(() => setSyncStatus(s => ({ ...s, error: null })), 6000);
+    }
+  }, []);
 
+  useEffect(() => {
+    // Load DB first, then auto-sync once
+    loadAll().then(() => {
+      if (!didAutoSync.current) {
+        didAutoSync.current = true;
+        runSync();
+      }
+    });
+
+    // Realtime subscriptions
     const matchSub = supabase
       .channel('matches-changes')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches' }, (payload) => {
@@ -91,7 +124,7 @@ export function AppProvider({ children }) {
       supabase.removeChannel(specialsSub);
       supabase.removeChannel(peopleSub);
     };
-  }, [loadAll]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateMatchScore = useCallback(async (id, hg, ag) => {
     setMatches((prev) => prev.map((m) => (m.id === id ? { ...m, hg, ag } : m)));
@@ -110,9 +143,8 @@ export function AppProvider({ children }) {
       }).eq('id', person.id).select().single();
       if (data) setPeople((prev) => prev.map((p) => (p.id === data.id ? data : p)));
     } else {
-      const sortOrder = people.length;
       const { data } = await supabase.from('people').insert({
-        name: person.name, teams: person.teams, tier: person.tier, sort_order: sortOrder,
+        name: person.name, teams: person.teams, tier: person.tier, sort_order: people.length,
       }).select().single();
       if (data) setPeople((prev) => [...prev, data]);
     }
@@ -125,8 +157,9 @@ export function AppProvider({ children }) {
 
   return (
     <AppContext.Provider value={{
-      people, matches, specials, loading, error,
-      updateMatchScore, updateSpecials, savePerson, removePerson, reload: loadAll,
+      people, matches, specials, loading, error, syncStatus,
+      updateMatchScore, updateSpecials, savePerson, removePerson,
+      reload: loadAll, manualSync: runSync,
     }}>
       {children}
     </AppContext.Provider>
