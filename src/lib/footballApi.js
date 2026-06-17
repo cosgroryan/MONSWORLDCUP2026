@@ -1,15 +1,12 @@
 import { supabase } from './supabase';
 
-// In dev: Vite proxies /football-api → api.football-data.org (key injected server-side, no CORS)
-// In prod: call API directly; VITE_FOOTBALL_API_KEY is baked into the bundle by Vite at build time
-const IS_DEV   = import.meta.env.DEV;
-const BASE_URL = IS_DEV ? '/football-api' : 'https://api.football-data.org/v4';
-const API_KEY  = import.meta.env.VITE_FOOTBALL_API_KEY || '';
+// Dev: Vite proxies /football-api → api.football-data.org (key injected server-side)
+// Prod: /api/football → Vercel serverless function → api.football-data.org (key stays server-side)
+const BASE_URL = import.meta.env.DEV ? '/football-api' : '/api/football';
 const COMPETITION_ID = 2000; // FIFA World Cup (WC)
 
 function apiFetch(path) {
-  const headers = (!IS_DEV && API_KEY) ? { 'X-Auth-Token': API_KEY } : {};
-  return fetch(`${BASE_URL}${path}`, { headers });
+  return fetch(`${BASE_URL}${path}`);
 }
 
 // Module-level cache so repeated modal opens don't re-fetch all matches
