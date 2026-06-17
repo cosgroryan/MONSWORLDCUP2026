@@ -5,6 +5,10 @@ import { supabase } from './supabase';
 const BASE_URL = '/football-api';
 const COMPETITION_ID = 2000; // FIFA World Cup (WC)
 
+// Module-level cache so repeated modal opens don't re-fetch all matches
+let _matchIdMap = null;
+let _matchIdMapTs = 0;
+
 const TEAM_NAME_MAP = {
   'Turkey': 'Türkiye',
   'Curacao': 'Curaçao',
@@ -60,4 +64,49 @@ export async function syncMatchScores() {
   }
 
   return { updated: updates.length, checked: finished.length };
+}
+
+// Returns matches currently IN_PLAY or at PAUSED (halftime). Normalises team names.
+export async function fetchLiveMatches() {
+  try {
+    const res = await fetch(`${BASE_URL}/competitions/${COMPETITION_ID}/matches?status=IN_PLAY%2CPAUSED`);
+    if (!res.ok) return [];
+    const json = await res.json();
+    return (json.matches || []).map(m => ({
+      apiId:    m.id,
+      status:   m.status,
+      minute:   m.minute ?? null,
+      home:     normalise(m.homeTeam?.name || ''),
+      away:     normalise(m.awayTeam?.name || ''),
+      hg:       m.score?.fullTime?.home ?? m.score?.halfTime?.home ?? null,
+      ag:       m.score?.fullTime?.away ?? m.score?.halfTime?.away ?? null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// Fetches goals, bookings, and lineups for a single match by home/away team name.
+export async function fetchMatchDetail(homeTeam, awayTeam) {
+  // Build or reuse the "team pair → API id" map (5-min TTL)
+  const now = Date.now();
+  if (!_matchIdMap || now - _matchIdMapTs > 5 * 60 * 1000) {
+    const res = await fetch(`${BASE_URL}/competitions/${COMPETITION_ID}/matches`);
+    if (!res.ok) throw new Error(`football-data.org ${res.status}`);
+    const json = await res.json();
+    _matchIdMap = {};
+    for (const m of (json.matches || [])) {
+      const h = normalise(m.homeTeam?.name || '');
+      const a = normalise(m.awayTeam?.name || '');
+      _matchIdMap[`${h}|${a}`] = m.id;
+    }
+    _matchIdMapTs = now;
+  }
+
+  const apiId = _matchIdMap[`${homeTeam}|${awayTeam}`];
+  if (!apiId) return null;
+
+  const res = await fetch(`${BASE_URL}/matches/${apiId}`);
+  if (!res.ok) throw new Error(`football-data.org ${res.status}`);
+  return await res.json();
 }

@@ -7,12 +7,14 @@ import MatchesScreen from './screens/MatchesScreen';
 import ScheduleScreen from './screens/ScheduleScreen';
 import SetupScreen from './screens/SetupScreen';
 import BensRoomScreen from './screens/BensRoomScreen';
+import KnockoutScreen from './screens/KnockoutScreen';
 
 const TABS = [
   { id: 'lb', label: '🏆 Leaderboard', path: '/leaderboard', screen: LeaderboardScreen },
   { id: 'pr', label: '💰 Prizes',       path: '/prizes',      screen: PrizesScreen },
   { id: 'mx', label: '⚽ Matches',      path: '/matches',     screen: MatchesScreen },
   { id: 'sc', label: '📅 Schedule',     path: '/schedule',    screen: ScheduleScreen },
+  { id: 'ko', label: '⚔️ Knockout',    path: '/knockout',    screen: KnockoutScreen, disabled: true },
   { id: 'su', label: '👥 Setup',        path: '/setup',       screen: SetupScreen },
   { id: 'br', label: "⛰️ Ben's Room",  path: '/bens_room',   screen: BensRoomScreen },
 ];
@@ -55,9 +57,11 @@ function Inner() {
       <div className="tab-wrap">
         <div className="tabs">
           {TABS.map(t => (
-            <NavLink key={t.id} to={t.path} className={({ isActive }) => `tab${isActive ? ' on' : ''}`}>
-              {t.label}
-            </NavLink>
+            t.disabled
+              ? <span key={t.id} className="tab tab-disabled">{t.label}</span>
+              : <NavLink key={t.id} to={t.path} className={({ isActive }) => `tab${isActive ? ' on' : ''}`}>
+                  {t.label}
+                </NavLink>
           ))}
         </div>
       </div>
