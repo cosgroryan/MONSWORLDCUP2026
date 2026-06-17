@@ -1,9 +1,16 @@
 import { supabase } from './supabase';
 
-// In dev: Vite proxies /football-api → api.football-data.org (injects API key server-side, no CORS)
-// In prod: deploy behind a server/CDN that has the same /football-api proxy configured
-const BASE_URL = '/football-api';
+// In dev: Vite proxies /football-api → api.football-data.org (key injected server-side, no CORS)
+// In prod: call API directly; VITE_FOOTBALL_API_KEY is baked into the bundle by Vite at build time
+const IS_DEV   = import.meta.env.DEV;
+const BASE_URL = IS_DEV ? '/football-api' : 'https://api.football-data.org/v4';
+const API_KEY  = import.meta.env.VITE_FOOTBALL_API_KEY || '';
 const COMPETITION_ID = 2000; // FIFA World Cup (WC)
+
+function apiFetch(path) {
+  const headers = (!IS_DEV && API_KEY) ? { 'X-Auth-Token': API_KEY } : {};
+  return fetch(`${BASE_URL}${path}`, { headers });
+}
 
 // Module-level cache so repeated modal opens don't re-fetch all matches
 let _matchIdMap = null;
@@ -30,7 +37,7 @@ function normalise(name) {
 }
 
 export async function syncMatchScores() {
-  const response = await fetch(`${BASE_URL}/competitions/${COMPETITION_ID}/matches?status=FINISHED`);
+  const response = await apiFetch(`/competitions/${COMPETITION_ID}/matches?status=FINISHED`);
 
   if (!response.ok) {
     const text = await response.text();
@@ -69,7 +76,7 @@ export async function syncMatchScores() {
 // Returns matches currently IN_PLAY or at PAUSED (halftime). Normalises team names.
 export async function fetchLiveMatches() {
   try {
-    const res = await fetch(`${BASE_URL}/competitions/${COMPETITION_ID}/matches?status=IN_PLAY%2CPAUSED`);
+    const res = await apiFetch(`/competitions/${COMPETITION_ID}/matches?status=IN_PLAY%2CPAUSED`);
     if (!res.ok) return [];
     const json = await res.json();
     return (json.matches || []).map(m => ({
@@ -91,7 +98,7 @@ export async function fetchMatchDetail(homeTeam, awayTeam) {
   // Build or reuse the "team pair → API id" map (5-min TTL)
   const now = Date.now();
   if (!_matchIdMap || now - _matchIdMapTs > 5 * 60 * 1000) {
-    const res = await fetch(`${BASE_URL}/competitions/${COMPETITION_ID}/matches`);
+    const res = await apiFetch(`/competitions/${COMPETITION_ID}/matches`);
     if (!res.ok) throw new Error(`football-data.org ${res.status}`);
     const json = await res.json();
     _matchIdMap = {};
@@ -106,7 +113,7 @@ export async function fetchMatchDetail(homeTeam, awayTeam) {
   const apiId = _matchIdMap[`${homeTeam}|${awayTeam}`];
   if (!apiId) return null;
 
-  const res = await fetch(`${BASE_URL}/matches/${apiId}`);
+  const res = await apiFetch(`/matches/${apiId}`);
   if (!res.ok) throw new Error(`football-data.org ${res.status}`);
   return await res.json();
 }
