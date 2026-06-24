@@ -859,7 +859,7 @@ function autoSpecials(){
   const {gf,ga}=groupGoals();
   let bestScored=null,bestConceded=null,maxGF=0,maxGA=0;
   TMS.forEach(t=>{if(gf[t]>maxGF){maxGF=gf[t];bestScored=t;}if(ga[t]>maxGA){maxGA=ga[t];bestConceded=t;}});
-  return{bestScored,bestConceded,maxGF,maxGA};
+  return{bestScored,bestConceded,maxGF,maxGA,gf,ga};
 }
 
 // find sweeper who owns a team
@@ -882,7 +882,8 @@ function populateSelects(){
   Object.entries(selects).forEach(([id,teams])=>{
     const el=document.getElementById(id);if(!el)return;
     const cur=el.value;
-    el.innerHTML='<option value="">— pick team —</option>'+teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
+    const emptyLbl=(id==='sel-mostscored'||id==='sel-mostconceded')?'— use auto —':'— pick team —';
+    el.innerHTML='<option value="">'+emptyLbl+'</option>'+teams.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('');
     if(cur)el.value=cur;
   });
   // restore saved values
@@ -952,17 +953,30 @@ function renderPrizes(){
   document.getElementById('pw-darkhorse').innerHTML=prizeWinnerHtml(sp.darkhorse&&sp.darkhorse.team,sp.darkhorse&&sp.darkhorse.round);
   document.getElementById('pw-fastest').innerHTML=prizeWinnerHtml(sp.fastest&&sp.fastest.team,sp.fastest&&sp.fastest.minute?(sp.fastest.minute+"'"):'');
 
-  // Most scored — auto or override
+  // Most scored / most conceded — auto from group-stage GF/GA unless manually overridden
+  const {gf,ga}=auto;
   const msTeam=sp.mostscored||auto.bestScored;
   const mcTeam=sp.mostconceded||auto.bestConceded;
-  document.getElementById('pw-mostscored').innerHTML=prizeWinnerHtml(msTeam,msTeam&&auto.maxGF?auto.maxGF+' goals':'');
-  document.getElementById('pw-mostconceded').innerHTML=prizeWinnerHtml(mcTeam,mcTeam&&auto.maxGA?auto.maxGA+' conceded':'');
+  document.getElementById('pw-mostscored').innerHTML=prizeWinnerHtml(msTeam,msTeam!=null?((gf[msTeam]??0)+' goals'):'');
+  document.getElementById('pw-mostconceded').innerHTML=prizeWinnerHtml(mcTeam,mcTeam!=null?((ga[mcTeam]??0)+' conceded'):'');
 
   // Auto hints
   const msHint=document.getElementById('auto-mostscored');
   const mcHint=document.getElementById('auto-mostconceded');
-  if(auto.bestScored){msHint.textContent='Auto-calculated: '+auto.bestScored+' ('+auto.maxGF+' goals)';}else{msHint.textContent='Will auto-calculate as scores are entered.';}
-  if(auto.bestConceded){mcHint.textContent='Auto-calculated: '+auto.bestConceded+' ('+auto.maxGA+' conceded)';}else{mcHint.textContent='Will auto-calculate as scores are entered.';}
+  if(sp.mostscored){
+    msHint.textContent='Manual override · auto: '+(auto.bestScored||'—')+(auto.bestScored?' ('+auto.maxGF+' goals)':'');
+  }else if(auto.bestScored){
+    msHint.textContent='Auto-calculated: '+auto.bestScored+' ('+auto.maxGF+' goals)';
+  }else{
+    msHint.textContent='Will auto-calculate as scores are entered.';
+  }
+  if(sp.mostconceded){
+    mcHint.textContent='Manual override · auto: '+(auto.bestConceded||'—')+(auto.bestConceded?' ('+auto.maxGA+' conceded)':'');
+  }else if(auto.bestConceded){
+    mcHint.textContent='Auto-calculated: '+auto.bestConceded+' ('+auto.maxGA+' conceded)';
+  }else{
+    mcHint.textContent='Will auto-calculate as scores are entered.';
+  }
 }
 
 // ── RENDER LEADERBOARD ─────────────────────────────────
