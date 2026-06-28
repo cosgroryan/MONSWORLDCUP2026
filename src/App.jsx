@@ -14,7 +14,7 @@ const TABS = [
   { id: 'pr', label: '💰 Prizes',       path: '/prizes',      screen: PrizesScreen },
   { id: 'mx', label: '⚽ Matches',      path: '/matches',     screen: MatchesScreen },
   { id: 'sc', label: '📅 Schedule',     path: '/schedule',    screen: ScheduleScreen },
-  { id: 'ko', label: '⚔️ Knockout',    path: '/knockout',    screen: KnockoutScreen, disabled: true },
+  { id: 'ko', label: '⚔️ Knockout',    path: '/knockout',    screen: KnockoutScreen },
   { id: 'su', label: '👥 Setup',        path: '/setup',       screen: SetupScreen },
   { id: 'br', label: "⛰️ Ben's Room",  path: '/bens_room',   screen: BensRoomScreen },
 ];

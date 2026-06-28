@@ -1,11 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import FlagImg from '../components/FlagImg';
 import { fetchMatchDetail } from '../lib/footballApi';
 
-// ── Flip to true when publishing for real KO stage ─────────────────────────
-const IS_LOCKED = false;
-const SEEN_KEY  = 'ko_seen_v1';
+const SEEN_KEY = 'ko_seen_v1';
 
 const ROUND_LABELS = { r32: 'Round of 32', r16: 'Round of 16', qf: 'Quarter Finals', sf: 'Semi Finals', final: 'The Final' };
 const ROUND_ICONS  = { r32: '⚔️', r16: '🔥', qf: '⚡', sf: '💥', final: '🏆' };
@@ -16,46 +14,6 @@ const CARD_H    = 40;   // match card height
 const COL_W     = 138;  // column width
 const CONN_W    = 16;   // connector SVG width
 const BRACKET_H = 16 * SLOT_BASE; // 768px
-
-// ── Hardcoded test bracket — swap for API data later ─────────────────────────
-const KO_MATCHES = [
-  // Round of 32 — uses real sweepstake teams so owner chips appear
-  { id:'r32-1',  round:'r32',   teamA:'Argentina',    teamB:'Morocco',      hg:2,    ag:1,    venue:'MetLife Stadium, NJ',          date:'1 Jul',  nzst:'07:00' },
-  { id:'r32-2',  round:'r32',   teamA:'France',       teamB:'Colombia',     hg:1,    ag:0,    venue:'Rose Bowl, LA',                date:'1 Jul',  nzst:'10:00' },
-  { id:'r32-3',  round:'r32',   teamA:'Brazil',       teamB:'Croatia',      hg:null, ag:null, venue:'Allegiant Stadium, LV',        date:'2 Jul',  nzst:'07:00' },
-  { id:'r32-4',  round:'r32',   teamA:'Germany',      teamB:'Japan',        hg:null, ag:null, venue:'AT&T Stadium, Dallas',         date:'2 Jul',  nzst:'10:00' },
-  { id:'r32-5',  round:'r32',   teamA:'Spain',        teamB:'Australia',    hg:null, ag:null, venue:'Hard Rock Stadium, Miami',     date:'3 Jul',  nzst:'07:00' },
-  { id:'r32-6',  round:'r32',   teamA:'Portugal',     teamB:'Ecuador',      hg:null, ag:null, venue:'SoFi Stadium, LA',             date:'3 Jul',  nzst:'10:00' },
-  { id:'r32-7',  round:'r32',   teamA:'England',      teamB:'Sweden',       hg:null, ag:null, venue:'Lumen Field, Seattle',         date:'4 Jul',  nzst:'07:00' },
-  { id:'r32-8',  round:'r32',   teamA:'Netherlands',  teamB:'Mexico',       hg:null, ag:null, venue:'BC Place, Vancouver',          date:'4 Jul',  nzst:'10:00' },
-  { id:'r32-9',  round:'r32',   teamA:'Belgium',      teamB:'Uruguay',      hg:null, ag:null, venue:'NRG Stadium, Houston',         date:'5 Jul',  nzst:'07:00' },
-  { id:'r32-10', round:'r32',   teamA:'United States',teamB:'Norway',       hg:null, ag:null, venue:'Gillette Stadium, Boston',     date:'5 Jul',  nzst:'10:00' },
-  { id:'r32-11', round:'r32',   teamA:'South Korea',  teamB:'Tunisia',      hg:null, ag:null, venue:'Lincoln Financial, Philly',    date:'6 Jul',  nzst:'07:00' },
-  { id:'r32-12', round:'r32',   teamA:'Switzerland',  teamB:'Senegal',      hg:null, ag:null, venue:'Arrowhead Stadium, KC',        date:'6 Jul',  nzst:'10:00' },
-  { id:'r32-13', round:'r32',   teamA:'Iran',         teamB:'Panama',       hg:null, ag:null, venue:'Mercedes-Benz Stadium, ATL',   date:'7 Jul',  nzst:'07:00' },
-  { id:'r32-14', round:'r32',   teamA:'Canada',       teamB:'Ghana',        hg:null, ag:null, venue:'BMO Field, Toronto',           date:'7 Jul',  nzst:'10:00' },
-  { id:'r32-15', round:'r32',   teamA:'Austria',      teamB:'Ivory Coast',  hg:null, ag:null, venue:'Estadio Azteca, Mexico City',  date:'8 Jul',  nzst:'07:00' },
-  { id:'r32-16', round:'r32',   teamA:'New Zealand',  teamB:'Türkiye',      hg:null, ag:null, venue:'Estadio BBVA, Monterrey',      date:'8 Jul',  nzst:'10:00' },
-  // Round of 16
-  { id:'r16-1',  round:'r16',   teamA:'Argentina',    teamB:'France',       hg:null, ag:null, venue:'MetLife Stadium, NJ',          date:'9 Jul',  nzst:'07:00' },
-  { id:'r16-2',  round:'r16',   teamA:null, teamB:null, hg:null, ag:null, venue:'TBD', date:'9 Jul',  nzst:'10:00' },
-  { id:'r16-3',  round:'r16',   teamA:null, teamB:null, hg:null, ag:null, venue:'TBD', date:'10 Jul', nzst:'07:00' },
-  { id:'r16-4',  round:'r16',   teamA:null, teamB:null, hg:null, ag:null, venue:'TBD', date:'10 Jul', nzst:'10:00' },
-  { id:'r16-5',  round:'r16',   teamA:null, teamB:null, hg:null, ag:null, venue:'TBD', date:'11 Jul', nzst:'07:00' },
-  { id:'r16-6',  round:'r16',   teamA:null, teamB:null, hg:null, ag:null, venue:'TBD', date:'11 Jul', nzst:'10:00' },
-  { id:'r16-7',  round:'r16',   teamA:null, teamB:null, hg:null, ag:null, venue:'TBD', date:'12 Jul', nzst:'07:00' },
-  { id:'r16-8',  round:'r16',   teamA:null, teamB:null, hg:null, ag:null, venue:'TBD', date:'12 Jul', nzst:'10:00' },
-  // Quarter Finals
-  { id:'qf-1',   round:'qf',    teamA:null, teamB:null, hg:null, ag:null, venue:'TBD', date:'14 Jul', nzst:'07:00' },
-  { id:'qf-2',   round:'qf',    teamA:null, teamB:null, hg:null, ag:null, venue:'TBD', date:'14 Jul', nzst:'10:00' },
-  { id:'qf-3',   round:'qf',    teamA:null, teamB:null, hg:null, ag:null, venue:'TBD', date:'15 Jul', nzst:'07:00' },
-  { id:'qf-4',   round:'qf',    teamA:null, teamB:null, hg:null, ag:null, venue:'TBD', date:'15 Jul', nzst:'10:00' },
-  // Semi Finals
-  { id:'sf-1',   round:'sf',    teamA:null, teamB:null, hg:null, ag:null, venue:'MetLife Stadium, NJ', date:'19 Jul', nzst:'07:00' },
-  { id:'sf-2',   round:'sf',    teamA:null, teamB:null, hg:null, ag:null, venue:'SoFi Stadium, LA',    date:'20 Jul', nzst:'07:00' },
-  // Final
-  { id:'final-1',round:'final', teamA:null, teamB:null, hg:null, ag:null, venue:'MetLife Stadium, NJ', date:'27 Jul', nzst:'07:00' },
-];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const ANIM_VARIANTS = ['lightning', 'hurricane', 'stomp', 'fissure'];
@@ -151,7 +109,7 @@ const ROUNDS_META = [
   { key:'final', label:'Final', roundIdx:4 },
 ];
 
-function BracketView({ onOpen }) {
+function BracketView({ matches, onOpen }) {
   return (
     <div className="bracket-outer">
       {/* Round header row */}
@@ -167,12 +125,12 @@ function BracketView({ onOpen }) {
       {/* Columns + connectors */}
       <div className="bracket-body">
         {ROUNDS_META.map(({ key, roundIdx }, ri) => {
-          const matches = KO_MATCHES.filter(m => m.round === key);
+          const roundMatches = matches.filter(m => m.round === key);
           const slotH   = SLOT_BASE * Math.pow(2, roundIdx);
           return (
             <React.Fragment key={key}>
               <div style={{ position:'relative', width:COL_W, height:BRACKET_H, flexShrink:0 }}>
-                {matches.map((m, i) => {
+                {roundMatches.map((m, i) => {
                   const top = i * slotH + (slotH - CARD_H) / 2;
                   return (
                     <div key={m.id} style={{ position:'absolute', top, left:0, right:0, height:CARD_H }}>
@@ -182,7 +140,7 @@ function BracketView({ onOpen }) {
                 })}
               </div>
               {ri < ROUNDS_META.length - 1 && (
-                <RoundConnector fromRoundIdx={roundIdx} toMatchCount={matches.length / 2} />
+                <RoundConnector fromRoundIdx={roundIdx} toMatchCount={roundMatches.length / 2} />
               )}
             </React.Fragment>
           );
@@ -449,25 +407,37 @@ function KOMatchCard({ match, people, onOpen }) {
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 export default function KnockoutScreen() {
-  const { people } = useApp();
-  const [view, setView]             = useState('list'); // 'list' | 'bracket'
+  const { people, koMatches } = useApp();
+  const [view, setView]               = useState('list'); // 'list' | 'bracket'
   const [activeRound, setActiveRound] = useState('r32');
 
-  // Auto-reveal queue: completed matches the user hasn't seen yet
-  const [queue] = useState(() => {
-    const seen = getSeen();
-    return KO_MATCHES.filter(m => m.hg !== null && m.ag !== null && !seen.includes(m.id));
-  });
-  const [queueIdx, setQueueIdx]       = useState(0);
+  // Map DB fields (home/away) to the names used throughout the screen (teamA/teamB)
+  const matches = useMemo(
+    () => koMatches.map(m => ({ ...m, teamA: m.home, teamB: m.away, date: m.date_label })),
+    [koMatches]
+  );
+
+  // Auto-reveal queue: completed matches the user hasn't seen yet.
+  // Seeded once after data first loads.
+  const [seen]           = useState(() => getSeen());
+  const [queue,  setQueue]       = useState([]);
+  const [queueSeeded, setQueueSeeded] = useState(false);
+  const [queueIdx, setQueueIdx]  = useState(0);
   const [autoVisible, setAutoVisible] = useState(false);
+
+  useEffect(() => {
+    if (matches.length > 0 && !queueSeeded) {
+      setQueue(matches.filter(m => m.hg !== null && m.ag !== null && !seen.includes(m.id)));
+      setQueueSeeded(true);
+    }
+  }, [matches, seen, queueSeeded]);
+
+  useEffect(() => {
+    if (queue.length > 0) setAutoVisible(true);
+  }, [queue]);
 
   // Manual click on a card
   const [manualMatch, setManualMatch] = useState(null);
-
-  // Kick off auto-reveal on mount if queue is non-empty
-  useEffect(() => {
-    if (queue.length > 0) setAutoVisible(true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const currentAuto = autoVisible ? queue[queueIdx] : null;
 
@@ -489,17 +459,6 @@ export default function KnockoutScreen() {
 
   const handleCardClick = (match) => setManualMatch(match);
   const handleManualClose = () => setManualMatch(null);
-
-  if (IS_LOCKED) {
-    return (
-      <div className="ko-locked">
-        <div className="ko-locked-icon">⚔️</div>
-        <div className="ko-locked-title">Knockout Rounds</div>
-        <div className="ko-locked-sub">Bracket unlocks when the group stage ends</div>
-        <div className="ko-locked-date">Begins 1 July 2026</div>
-      </div>
-    );
-  }
 
   return (
     <div className="ko-page">
@@ -526,12 +485,12 @@ export default function KnockoutScreen() {
       {/* ── Content ── */}
       {view === 'list' ? (
         <div className="ko-match-list">
-          {KO_MATCHES.filter(m => m.round === activeRound).map(m => (
+          {matches.filter(m => m.round === activeRound).map(m => (
             <KOMatchCard key={m.id} match={m} people={people} onOpen={handleCardClick} />
           ))}
         </div>
       ) : (
-        <BracketView onOpen={handleCardClick} />
+        <BracketView matches={matches} onOpen={handleCardClick} />
       )}
 
       {/* Auto-reveal: cycling through unseen completed results */}

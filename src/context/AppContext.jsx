@@ -13,11 +13,12 @@ const DEFAULT_SPECIALS = {
 };
 
 export function AppProvider({ children }) {
-  const [people, setPeople]   = useState([]);
-  const [matches, setMatches] = useState([]);
-  const [specials, setSpecials] = useState(DEFAULT_SPECIALS);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
+  const [people, setPeople]       = useState([]);
+  const [matches, setMatches]     = useState([]);
+  const [koMatches, setKoMatches] = useState([]);
+  const [specials, setSpecials]   = useState(DEFAULT_SPECIALS);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
   const [syncStatus, setSyncStatus] = useState({ syncing: false, newScores: null, error: null });
   const didAutoSync = useRef(false);
 
@@ -29,10 +30,12 @@ export function AppProvider({ children }) {
         { data: pData, error: pErr },
         { data: mData, error: mErr },
         { data: sData, error: sErr },
+        { data: kData },
       ] = await Promise.all([
         supabase.from('people').select('*').order('sort_order'),
         supabase.from('matches').select('*'),
         supabase.from('specials').select('*').eq('id', 1).single(),
+        supabase.from('ko_matches').select('*').order('match_order'),
       ]);
 
       if (pErr) throw pErr;
@@ -54,6 +57,8 @@ export function AppProvider({ children }) {
         setMatches(mData);
       }
 
+      if (kData) setKoMatches(kData);
+
       if (sErr || !sData) {
         await supabase.from('specials').upsert({ id: 1, ...DEFAULT_SPECIALS });
         setSpecials(DEFAULT_SPECIALS);
@@ -74,8 +79,12 @@ export function AppProvider({ children }) {
       const result = await syncMatchScores();
       // Re-fetch matches so local state reflects what was written to DB
       if (result.updated > 0) {
-        const { data } = await supabase.from('matches').select('*');
-        if (data) setMatches(data);
+        const [{ data: mNew }, { data: kNew }] = await Promise.all([
+          supabase.from('matches').select('*'),
+          supabase.from('ko_matches').select('*').order('match_order'),
+        ]);
+        if (mNew) setMatches(mNew);
+        if (kNew) setKoMatches(kNew);
       }
       setSyncStatus({ syncing: false, newScores: result.updated, error: null });
       // Clear the count after 5 s so it doesn't linger
@@ -103,6 +112,13 @@ export function AppProvider({ children }) {
       })
       .subscribe();
 
+    const koSub = supabase
+      .channel('ko-matches-changes')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'ko_matches' }, (payload) => {
+        setKoMatches((prev) => prev.map((m) => (m.id === payload.new.id ? { ...m, ...payload.new } : m)));
+      })
+      .subscribe();
+
     const specialsSub = supabase
       .channel('specials-changes')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'specials' }, (payload) => {
@@ -121,6 +137,7 @@ export function AppProvider({ children }) {
 
     return () => {
       supabase.removeChannel(matchSub);
+      supabase.removeChannel(koSub);
       supabase.removeChannel(specialsSub);
       supabase.removeChannel(peopleSub);
     };
@@ -157,7 +174,7 @@ export function AppProvider({ children }) {
 
   return (
     <AppContext.Provider value={{
-      people, matches, specials, loading, error, syncStatus,
+      people, matches, koMatches, specials, loading, error, syncStatus,
       updateMatchScore, updateSpecials, savePerson, removePerson,
       reload: loadAll, manualSync: runSync,
     }}>

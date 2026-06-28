@@ -48,26 +48,38 @@ export async function syncMatchScores() {
 
   if (finished.length === 0) return { updated: 0, checked: 0 };
 
-  const { data: ourMatches, error } = await supabase.from('matches').select('id, home, away, hg, ag');
-  if (error) throw error;
+  const [
+    { data: ourMatches,   error: mErr },
+    { data: ourKOMatches, error: kErr },
+  ] = await Promise.all([
+    supabase.from('matches').select('id, home, away, hg, ag'),
+    supabase.from('ko_matches').select('id, home, away, hg, ag').not('home', 'is', null),
+  ]);
+  if (mErr) throw mErr;
+  if (kErr) throw kErr;
 
-  const updates = [];
+  const updates   = [];
+  const koUpdates = [];
+
   for (const apiM of finished) {
     const apiHome = normalise(apiM.homeTeam?.name || '');
     const apiAway = normalise(apiM.awayTeam?.name || '');
     const hg = apiM.score.fullTime.home;
     const ag = apiM.score.fullTime.away;
-    const match = ourMatches.find((m) => m.home === apiHome && m.away === apiAway);
-    if (match && (match.hg !== hg || match.ag !== ag)) {
-      updates.push({ id: match.id, hg, ag });
-    }
+
+    const m = (ourMatches || []).find((r) => r.home === apiHome && r.away === apiAway);
+    if (m && (m.hg !== hg || m.ag !== ag)) updates.push({ id: m.id, hg, ag });
+
+    const k = (ourKOMatches || []).find((r) => r.home === apiHome && r.away === apiAway);
+    if (k && (k.hg !== hg || k.ag !== ag)) koUpdates.push({ id: k.id, hg, ag });
   }
 
-  for (const u of updates) {
-    await supabase.from('matches').update({ hg: u.hg, ag: u.ag }).eq('id', u.id);
-  }
+  await Promise.all([
+    ...updates.map(u => supabase.from('matches').update({ hg: u.hg, ag: u.ag }).eq('id', u.id)),
+    ...koUpdates.map(u => supabase.from('ko_matches').update({ hg: u.hg, ag: u.ag }).eq('id', u.id)),
+  ]);
 
-  return { updated: updates.length, checked: finished.length };
+  return { updated: updates.length + koUpdates.length, checked: finished.length };
 }
 
 // Returns matches currently IN_PLAY or at PAUSED (halftime). Normalises team names.
