@@ -393,6 +393,7 @@ function KOMatchCard({ match, people, onOpen }) {
             </div>
           : <div className="ko-card-vs-pill">VS</div>}
         <div className="ko-card-date">{match.date}</div>
+        {match.nzst && <div className="ko-card-time">{match.nzst} <span className="ko-card-tz">NZST</span></div>}
         {hasTeams && <div className="ko-card-tap-hint">TAP ⚡</div>}
       </div>
       <div className={`ko-card-side ko-card-right${bWin ? ' ko-card-win' : ''}`}>

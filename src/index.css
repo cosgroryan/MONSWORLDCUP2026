@@ -505,6 +505,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .ko-card-dash{color:rgba(255,255,255,.3);font-weight:400}
 .ko-card-vs-pill{font-size:11px;font-weight:900;color:rgba(255,255,255,.3);letter-spacing:.1em;background:rgba(255,255,255,.05);padding:4px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.08)}
 .ko-card-date{font-size:9px;color:rgba(255,255,255,.3);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.ko-card-time{font-size:9px;color:rgba(255,255,255,.45);font-weight:700;letter-spacing:.04em}
+.ko-card-tz{font-size:8px;color:rgba(255,255,255,.2);font-weight:500}
 .ko-card-tap-hint{font-size:9px;color:#10B981;font-weight:800;letter-spacing:.1em;opacity:0;transition:opacity .15s}
 
 /* ── Locked state ───────────────────────────────────────────────────────── */
