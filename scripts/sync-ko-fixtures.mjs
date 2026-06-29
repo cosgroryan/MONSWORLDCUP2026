@@ -91,6 +91,17 @@ async function main() {
     byRound[r].sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
   }
 
+  // Convert UTC ISO date string → { date_label: '1 Jul', nzst: '07:00' } in NZST (UTC+12)
+function toNZST(utcDate) {
+  if (!utcDate) return { date_label: 'TBD', nzst: 'TBD' };
+  const d = new Date(new Date(utcDate).getTime() + 12 * 60 * 60 * 1000);
+  const day   = d.getUTCDate();
+  const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
+  const hh    = String(d.getUTCHours()).padStart(2, '0');
+  const mm    = String(d.getUTCMinutes()).padStart(2, '0');
+  return { date_label: `${day} ${month}`, nzst: `${hh}:${mm}` };
+}
+
   // Match API fixtures to our DB rows by round + order
   const updates = [];
   for (const [round, apiMs] of Object.entries(byRound)) {
@@ -105,11 +116,13 @@ async function main() {
       const away = apiM.awayTeam?.name ? normalise(apiM.awayTeam.name) : null;
       const hg   = apiM.score?.fullTime?.home ?? null;
       const ag   = apiM.score?.fullTime?.away ?? null;
+      const { date_label, nzst } = toNZST(apiM.utcDate);
 
-      const changed = row.home !== home || row.away !== away || row.hg !== hg || row.ag !== ag;
+      const changed = row.home !== home || row.away !== away || row.hg !== hg || row.ag !== ag
+                   || row.date_label !== date_label || row.nzst !== nzst;
       if (changed) {
-        updates.push({ id: row.id, home, away, hg, ag });
-        console.log(`  ${row.id}: ${row.home || 'TBD'} vs ${row.away || 'TBD'}  →  ${home || 'TBD'} vs ${away || 'TBD'}  (${hg ?? '-'}-${ag ?? '-'})`);
+        updates.push({ id: row.id, home, away, hg, ag, date_label, nzst });
+        console.log(`  ${row.id}: ${home || 'TBD'} vs ${away || 'TBD'}  ${date_label} ${nzst} NZST  (${hg ?? '-'}-${ag ?? '-'})`);
       } else {
         console.log(`  ${row.id}: ${home || 'TBD'} vs ${away || 'TBD'} — no change`);
       }
@@ -124,10 +137,12 @@ async function main() {
   console.log(`\nApplying ${updates.length} updates...`);
   for (const u of updates) {
     await supabaseQuery('PATCH', `/ko_matches?id=eq.${u.id}`, {
-      home: u.home,
-      away: u.away,
-      hg:   u.hg,
-      ag:   u.ag,
+      home:       u.home,
+      away:       u.away,
+      hg:         u.hg,
+      ag:         u.ag,
+      date_label: u.date_label,
+      nzst:       u.nzst,
     });
     console.log(`  ✓ ${u.id}`);
   }
