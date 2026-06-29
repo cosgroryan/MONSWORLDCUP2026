@@ -33,6 +33,13 @@ function markSeen(id) {
   if (!s.includes(id)) { s.push(id); localStorage.setItem(SEEN_KEY, JSON.stringify(s)); }
 }
 
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function dayOfWeek(dateLabel) {
+  if (!dateLabel || dateLabel === 'TBD') return '';
+  const d = new Date(`${dateLabel} 2026`);
+  return isNaN(d) ? '' : DAYS[d.getDay()];
+}
+
 // ── Screen Crack SVG ──────────────────────────────────────────────────────────
 function ScreenCrack() {
   const lines = ['M50 82 L14 12','M50 82 L1 48','M50 82 L26 3','M50 82 L78 8','M50 82 L98 40','M50 82 L70 1','M50 82 L8 38','M50 82 L94 26','M50 82 L42 0','M50 82 L62 0'];
@@ -392,7 +399,7 @@ function KOMatchCard({ match, people, onOpen }) {
               <span className={bWin ? 'w' : ''}>{match.ag}</span>
             </div>
           : <div className="ko-card-vs-pill">VS</div>}
-        <div className="ko-card-date">{match.date}</div>
+        <div className="ko-card-date"><span className="ko-card-day">{dayOfWeek(match.date)}</span> {match.date}</div>
         {match.nzst && <div className="ko-card-time">{match.nzst} <span className="ko-card-tz">NZST</span></div>}
         {hasTeams && <div className="ko-card-tap-hint">TAP ⚡</div>}
       </div>
